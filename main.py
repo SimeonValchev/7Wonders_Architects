@@ -1,5 +1,6 @@
 import random
 import wx
+import time
 
 
 def generate_card(deck):
@@ -19,39 +20,117 @@ def generate_inv():
     return rand_int_inv
 
 
-def next_turn_checker():
-    global at_turn
-    if list(flags.values()) == [0, 0, 0]:
-        at_turn = (at_turn + 1) % 2
-        flags['draw'] = 1
-
-
 # MAIN MAIN MAIN
 inventions = [0] + [1] * 15
 deck_cent = [0] + [10] * 14
 deck_left = [0] + [10] * 14
 deck_right = [0] + [10] * 14
+# deck_cent = [0] + [0] * 11 + [10]*3
+# deck_left = [0] + [0] * 11 + [10]*3
+# deck_right = [0] + [0] * 11 + [10]*3
 my_decks = {'cent': deck_cent, 'left': deck_left, 'right': deck_right}
 
 top_cards = {'cent': generate_card(my_decks['cent']), 'left': generate_card(my_decks['left']),
              'right': generate_card(my_decks['right'])}
 
 inv_list = [generate_inv() for i in range(0, 3)]
+war = 0
+traded_tools = [0] * 3
 
 
 class Player:
     def __init__(self):
-        self.data = [0] * 13
-        self.inv = [0] * 15
+        self.data = [0] * 14
+        self.inv = [0] + [0] * 15
         self.score = 0
         self.cat = False
+        self.can_use_cat = False
 
 
 at_turn = 0
 player = [Player(), Player()]
 flags = {'build': 0, 'draw': 1, 'inv': 0}
 
+
 class MyFrame(wx.Frame):
+
+    def war_update(self, horns):
+        global war
+        temp_client = wx.ClientDC(self.panel)
+        unupdated_war = war
+        war += horns
+
+        # UPDATE VISUAL TOKENS
+        for i in range(unupdated_war, min(war, 3)):
+            temp_client.DrawBitmap(self.war_icons.GetSubBitmap((0, 0, 75, 75)), 143 + i * 85, 63, True)
+
+        if war >= 3:
+            war = 0
+            time.sleep(1)
+
+            # CALCULATE WINNER
+            p0_war = max(player[0].data[8] + player[0].data[9], 1)
+            p1_war = max(player[1].data[8] + player[1].data[9], 1)
+
+            total = 0
+            winner = -1
+            temp_coords = [0, self.GetSize()[1] - 142]
+            if p0_war == p1_war:
+                winner = 0
+            elif p0_war > p1_war:
+                total = 1 + min((p0_war - p1_war) // p1_war, 1)
+                temp_coords[0] = 448
+                winner = 0
+            else:
+                total = 1 + min((p1_war - p0_war) // p0_war, 1)
+                temp_coords[0] = self.GetSize()[0] - 86
+                winner = 1
+
+            # BACKEND UPDATE
+            player[winner].data[13] += total
+            player[0].data[9] = 0
+            player[1].data[9] = 0
+
+            # VISUAL UPDATE
+            temp_client.DrawBitmap(self.blank_tile, 448, self.GetSize()[1] - 200)
+            temp_client.DrawBitmap(self.blank_tile, self.GetSize()[0] - 86, self.GetSize()[1] - 200)
+
+            if total != 0:
+                temp_client.DrawBitmap(self.bonus_icons.GetSubBitmap((0, 0, 58, 58)), temp_coords[0], temp_coords[1])
+                if player[winner].data[13] > 1:
+                    temp_client.DrawCircle(temp_coords[0] + 50, temp_coords[1] + 50, 10)
+                    temp_client.DrawText(str(player[winner].data[13]), temp_coords[0] + 47, temp_coords[1] + 43)
+
+            time.sleep(1)
+            # PEACE TOKENS RESET
+            for i in range(0, 3):
+                temp_client.DrawBitmap(self.war_icons.GetSubBitmap((75, 0, 75, 75)), 143 + i * 85, 63, True)
+
+    def inv_update(self):
+        c1 = 0
+        c2 = 0
+        exert = player[at_turn].data[10:13]
+        if exert[0] == exert[1] == exert[2]:
+            c1 = exert[0]
+        for i in exert:
+            c2 += i//2
+
+        flags['inv'] = max(c1, c2)
+
+    def next_turn_checker(self):
+        global at_turn
+        if list(flags.values()) == [0, 0, 0]:
+            at_turn = (at_turn + 1) % 2
+            flags['draw'] = 1
+            player[at_turn].can_use_cat = player[at_turn].cat
+
+            arrow_painter = wx.ClientDC(self.panel)
+            if at_turn == 0:
+                arrow_painter.DrawBitmap(self.arr_left, self.GetSize()[0] // 2 - self.arr_left.GetSize()[0] // 2,
+                                         self.label.GetPosition()[1] + 50)
+            else:
+                arrow_painter.DrawBitmap(self.arr_right, self.GetSize()[0] // 2 - self.arr_right.GetSize()[0] // 2,
+                                         self.label.GetPosition()[1] + 50)
 
     def handle_resource(self, id):
         res_client = wx.ClientDC(self.panel)
@@ -69,7 +148,126 @@ class MyFrame(wx.Frame):
             res_client.DrawCircle(coords[0] + 50, coords[1] + 50, 10)
             res_client.DrawText(str(player[at_turn].data[id - 1]), coords[0] + 47, coords[1] + 43)
 
+    def handle_civil(self, id):
+        civ_client = wx.ClientDC(self.panel)
+        civ_client.SetBackground(wx.Brush("WHITE"))
+        player[at_turn].data[id - 1] += 1
+
+        if id // 8 == 0:
+            player[at_turn].cat = True
+            player[at_turn].can_use_cat = True
+
+            player[(at_turn + 1) % 2].cat = False
+
+        coords = [0, self.GetSize()[1] - 142]
+        if at_turn == 0:
+            coords[0] = 216 + 58 * (id // 8)
+        else:
+            coords[0] = (self.GetSize()[0] - 318) + 58 * (id // 8)
+
+        # CURRENT CHANGE
+        civ_client.DrawBitmap(self.icons.GetSubBitmap((58 * (id - 1), 0, 58, 58)), coords[0], coords[1])
+        if player[at_turn].data[id - 1] > 1:
+            civ_client.DrawCircle(coords[0] + 50, coords[1] + 50, 10)
+            civ_client.DrawText(str(player[at_turn].data[id - 1]), coords[0] + 47, coords[1] + 43)
+
+        # TOTAL
+        #   icon
+        civ_client.DrawBitmap(self.bonus_icons.GetSubBitmap((58, 0, 58, 58)), coords[0] + 58 * (10 - id), coords[1])
+        civ_client.DrawCircle(coords[0] + 50 + 58 * (10 - id), coords[1] + 50, 10)
+        civ_client.DrawText('Σ', coords[0] + 47 + 58 * (10 - id), coords[1] + 43)
+        civ_client.SetPen(wx.TRANSPARENT_PEN)
+        #   circle
+        civ_client.DrawCircle(coords[0] + 58 * (10 - id) + 29, coords[1] + 29, 15)
+        #   sum
+        font = wx.Font(15, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+        civ_client.SetFont(font)
+        sum = player[at_turn].data[6] * 2 + player[at_turn].data[7] * 3
+        indent_offset = 0
+        if sum // 10 >= 1:
+            indent_offset = 1
+        civ_client.DrawText(str(sum), coords[0] + 58 * (10 - id) + 24 - (indent_offset * 7), coords[1] + 17)
+        civ_client.SetPen(wx.Pen("black", 1))
+
+    def handle_war(self, id):
+        war_client = wx.ClientDC(self.panel)
+        war_client.SetBackground(wx.Brush("WHITE"))
+
+        temp_id = 8 + id // 10
+        player[at_turn].data[temp_id] += 1
+
+        # VISUAL UPDATE
+        coords = [0, self.GetSize()[1] - 200]
+        if at_turn == 0:
+            coords[0] = 390 + (58 * (temp_id // 9))
+        else:
+            coords[0] = (self.GetSize()[0] - 144) + (58 * (temp_id // 9))
+
+        war_client.DrawBitmap(self.icons.GetSubBitmap((58 * (9 - id // 10), 0, 58, 58)), coords[0], coords[1])
+        if player[at_turn].data[temp_id] > 1:
+            font = wx.Font(15, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+            war_client.SetFont(font)
+            war_client.DrawText(str(player[at_turn].data[temp_id]), coords[0] + 24, coords[1] + 17)
+
+        # UPDATE WAR TOKENS
+        if id // 10 >= 1:
+            self.war_update(1 + id // 11)
+
+    def handle_inv(self, id):
+        inv_client = wx.ClientDC(self.panel)
+        inv_client.SetBackground(wx.Brush("WHITE"))
+
+        player[at_turn].data[id - 2] += 1
+
+        # VISUAL UPDATE
+        coords = [0, self.GetSize()[1] - 142]
+        if at_turn == 0:
+            coords[0] = (58 * (id - 11)) - 16
+        else:
+            coords[0] = (self.GetSize()[0] - 492) + (58 * (id - 11)) - 58
+
+        inv_client.DrawBitmap(self.icons.GetSubBitmap((58 * (id - 2), 0, 58, 58)), coords[0], coords[1])
+        if player[at_turn].data[id - 2] > 1:
+            inv_client.DrawCircle(coords[0] + 50, coords[1] + 50, 7)
+            inv_client.DrawText(str(player[at_turn].data[id - 2]), coords[0] + 47, coords[1] + 43)
+
+        self.inv_update()
+
+    def tool_update(self):
+
+        # CHECK IF AMBIGUOUS
+        exert = player[at_turn].data[10:13]
+
+        if (exert[0] >= 1 and exert[1] >= 1 and exert[2] >= 1) and (exert[0] >= 2 or exert[1] >= 2 or exert[2] >= 2):
+            pass#trigger window
+        elif (exert[0] == 0 and exert[1] >= 2 and exert[2] >= 2) or (exert[0] >= 2 and exert[1] == 0 and exert[2] >= 2) or (exert[0] >= 2 and exert[1] >= 2 and exert[2] == 0):
+            pass#trigger window
+
+        self.on_open_panel(exert)
+
+        # RE-DRAW TOOLS minus TRADED_TOOLS
+        tl_client = wx.ClientDC(self.panel)
+        tl_client.SetBackground(wx.Brush("WHITE"))
+        for i in range(3):
+            # BACKEND UPDATE
+            player[at_turn].data[10 + i] -= traded_tools[i]
+            traded_tools[i] = 0
+
+            # UPDATE VISUALS
+            tl_client.DrawBitmap(self.blank_tile, 42 + (58*i) + (at_turn*(self.GetSize()[0] - 532)), self.GetSize()[1] - 142)
+            if player[at_turn].data[10 + i] >= 1:
+                tl_client.DrawBitmap(self.icons.GetSubBitmap((580 + 58*i, 0, 58, 58)), 42 + (58*i) + (at_turn*(self.GetSize()[0] - 532)), self.GetSize()[1] - 142)
+                if player[at_turn].data[10 + i] >= 2:
+                    tl_client.DrawCircle(42 + (58*i) + 50 + (at_turn*(self.GetSize()[0] - 532)), self.GetSize()[1] - 142 + 50, 7)
+                    tl_client.DrawText(str(player[at_turn].data[10 + i]), 42 + (58*i) + 47 + (at_turn*(self.GetSize()[0] - 532)), self.GetSize()[1] - 142 + 43)
+
+
+
     def draw_invention(self, event):
+        if flags['inv'] == 0:
+            return False
+
+        # DETERMINE WHICH BUTTON IS PRESSED
         x, y = event.GetPosition()
         frame = self.GetSize()
         which_one = -1
@@ -87,28 +285,55 @@ class MyFrame(wx.Frame):
         if which_one == -1:
             return False
 
-        inv_list[which_one] = generate_inv()
+        # GIVE INVENTION TO PLAYER
+        player[at_turn].inv[inv_list[which_one]] = 1
+        player[at_turn].inv[0] += 1
 
+        # GENERATE NEW INVENTION AND UPDATE VISUALS
         dc2 = wx.ClientDC(self.panel)
         dc2.SetBackground(wx.Brush("WHITE"))
-        inv_tokens2 = wx.Bitmap('Assets/progress.png', wx.BITMAP_TYPE_PNG)
+
+        #   VISUALIZE TAKEN INVENTION
         dc2.DrawBitmap(
-            inv_tokens2.GetSubBitmap((100 * (inv_list[which_one] % 4), 100 * (inv_list[which_one] // 4), 100, 100)),
+            self.inv_tokens_small.GetSubBitmap((58 * (inv_list[which_one] % 4), 58 * (inv_list[which_one] // 4), 58, 58)), at_turn*(self.GetSize()[0] - 492) + 58*(player[at_turn].inv[0] - 1), self.GetSize()[1] - 75)
+
+        #   VISUALIZE NEW INVENTION
+        inv_list[which_one] = generate_inv()
+        dc2.DrawBitmap(
+            self.inv_tokens.GetSubBitmap((100 * (inv_list[which_one] % 4), 100 * (inv_list[which_one] // 4), 100, 100)),
             self.GetSize()[0] - 370 + 110 * which_one, 50, True)
 
+        #   UPDATE TOOLS
+        self.tool_update()
+
+        flags['inv'] -= 1
+        self.next_turn_checker()
+
     def draw_card(self, which_deck):
+        if flags['draw'] <= 0:
+            return False
 
         temp_card = top_cards[which_deck]
         if temp_card <= 6:
             self.handle_resource(temp_card)
+        elif temp_card in [7, 8]:
+            self.handle_civil(temp_card)
+        elif temp_card in [9, 10, 11]:
+            self.handle_war(temp_card)
+        elif temp_card in [12, 13, 14]:
+            self.handle_inv(temp_card)
 
-        # UPDATE DECK
+        # UPDATE VISUALS
         my_decks[which_deck][top_cards[which_deck]] -= 1
         top_cards[which_deck] = generate_card(my_decks[which_deck])
-        self.list_buttons[which_deck].SetBitmap(self.cards.GetSubBitmap((100 * top_cards[which_deck], 0, 100, 148)))
+        if which_deck != 'cent':
+            self.list_buttons[which_deck].SetBitmap(self.cards.GetSubBitmap((100 * top_cards[which_deck], 0, 100, 148)))
+        else:
+            player[at_turn].can_use_cat = False
+            self.list_buttons[which_deck].SetBitmap(self.cards.GetSubBitmap((0, 0, 100, 148)))
 
         flags['draw'] -= 1
-        next_turn_checker()
+        self.next_turn_checker()
 
     def hover_cent_deck(self, cat, hover):
 
@@ -143,6 +368,10 @@ class MyFrame(wx.Frame):
         dc.DrawBitmap(temp_left, 100, self.GetSize()[1] - 200 - temp_left.GetSize()[1], True)
         dc.DrawBitmap(temp_right, self.GetSize()[0] - 450, self.GetSize()[1] - 200 - temp_right.GetSize()[1], True)
 
+        # AT TURN INIT ARROW
+        dc.DrawBitmap(self.arr_left, self.GetSize()[0] // 2 - self.arr_left.GetSize()[0] // 2,
+                      self.label.GetPosition()[1] + 50)
+
         # PEACE ICONS
         for i in range(0, 3):
             dc.DrawBitmap(self.war_icons.GetSubBitmap((75, 0, 75, 75)), 143 + i * 85, 63, True)
@@ -165,6 +394,11 @@ class MyFrame(wx.Frame):
         self.cards = wx.Bitmap('Assets/cards_regular.png', wx.BITMAP_TYPE_PNG)
         self.war_icons = wx.Bitmap('Assets/war_icons.png', wx.BITMAP_TYPE_PNG)
         self.inv_tokens = wx.Bitmap('Assets/progress.png', wx.BITMAP_TYPE_PNG)
+        self.inv_tokens_small = wx.Bitmap('Assets/progress_smaller.png', wx.BITMAP_TYPE_PNG)
+        self.arr_left = wx.Bitmap('Assets/arrow_left.png', wx.BITMAP_TYPE_PNG)
+        self.arr_right = wx.Bitmap('Assets/arrow_right.png', wx.BITMAP_TYPE_PNG)
+        self.bonus_icons = wx.Bitmap('Assets/bonus_icons.png', wx.BITMAP_TYPE_PNG)
+        self.blank_tile = wx.Bitmap('Assets/blank_tile.png', wx.BITMAP_TYPE_PNG)
 
         #subject to future change
         self.wonder_leftside = wx.Bitmap('Assets/wonder_babylon.png', wx.BITMAP_TYPE_PNG)
@@ -175,6 +409,7 @@ class MyFrame(wx.Frame):
         # [1] - HEIGHT - 864
 
         self.panel = MyPanel(self)
+        self.traded_tools = [0, 0, 0]
 
         #INVENTIONS CLICK
         self.panel.Bind(wx.EVT_LEFT_DOWN, self.draw_invention)
@@ -210,12 +445,66 @@ class MyFrame(wx.Frame):
         self.button_right.Bind(wx.EVT_BUTTON, lambda event: self.draw_card('right'))
 
         # BIND HOVERING CENT-DECK for CAT TOTEM FUNCTIONALITY
-        self.button_cent.Bind(wx.EVT_ENTER_WINDOW, lambda event: self.hover_cent_deck(True, True))
-        self.button_cent.Bind(wx.EVT_LEAVE_WINDOW, lambda event: self.hover_cent_deck(True, False))
+        self.button_cent.Bind(wx.EVT_ENTER_WINDOW, lambda event: self.hover_cent_deck(player[at_turn].cat, True))
+        self.button_cent.Bind(wx.EVT_LEAVE_WINDOW, lambda event: self.hover_cent_deck(player[at_turn].cat, False))
 
-        # LABEL TEST
-        #self.label = wx.StaticText(self.panel, label='hallo', size=(50,20))
+        # LABEL 'AT TURN'
+        self.label = wx.StaticText(self.panel, label='At turn')
+        # FONT SIZE
+        font = self.label.GetFont()
+        font.SetPointSize(20)
+        self.label.SetFont(font)
+        # LABEL POSITION
+        self.label.SetPosition((frame_size[0] // 2 - self.label.GetSize()[0] // 2, frame_size[1] // 2 - 150))
 
+    def on_open_panel(self, tools):
+        new_panel = SeamlessPanel(self, tools)
+        new_panel.ShowModal()
+        new_panel.Destroy()
+
+
+class SeamlessPanel(wx.Dialog):
+
+    def __init__(self, parent, tools):
+        super().__init__(parent, title='Choose what tools to spend', style=wx.NO_BORDER | wx.DEFAULT_DIALOG_STYLE)
+        self.tools = tools
+        panel = wx.Panel(self)
+
+        # BUTTONS
+        self.icons = wx.Bitmap('Assets/main_icons.png', wx.BITMAP_TYPE_PNG)
+        self.buttons = []
+        self.nums = []
+        for i in range(3):
+            btn = wx.BitmapButton(panel, bitmap=self.icons.GetSubBitmap((580 + (58*i), 0, 58, 58)), pos=(3 + i*68, 20))
+            btn.Bind(wx.EVT_BUTTON, self.on_button_click)
+            if tools[i] < 1:
+                btn.Hide()
+                self.nums.append(None)
+            else:
+                num = wx.StaticText(panel, label=str(self.tools[i]), pos=(i * 68 + btn.GetSize()[0]//2 + 3, btn.GetSize()[1] + 25))
+                self.nums.append(num)
+            self.buttons.append(btn)
+
+        # Button to close the dialog
+        close_button = wx.Button(panel, size=(self.buttons[1].GetSize()[0], 20), label="Send", pos=(self.buttons[1].GetPosition()[0], self.buttons[1].GetPosition()[0] + 50))
+        close_button.Bind(wx.EVT_BUTTON, self.on_send)
+
+        self.SetPosition((400, 300))
+        self.SetSize((self.buttons[0].GetSize()[0]*3 + 26, 200))
+
+    def on_button_click(self, event):
+        button = event.GetEventObject()
+        index = self.buttons.index(button)
+        if self.tools[index] == 0:
+            return False
+        self.tools[index] -= 1
+        traded_tools[index] += 1
+        self.nums[index].SetLabel(str(self.tools[index]))
+
+    def on_send(self, event):
+        t = traded_tools
+        if (t[0] >= 1 and t[1] >= 1 and t[2] >= 1) or (t[0] >= 2 or t[1] >= 2 or t[2] >= 2):
+            self.Close()
 
 class MyPanel(wx.Panel):
     def __init__(self, parent):
