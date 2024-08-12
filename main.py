@@ -23,11 +23,8 @@ def generate_inv():
 # MAIN MAIN MAIN
 inventions = [0] + [1] * 15
 deck_cent = [0] + [10] * 14
-deck_left = [0] + [10] * 14
+deck_left = [0] + [10]*6 + [0] * 14
 deck_right = [0] + [10] * 14
-# deck_cent = [0] + [0] * 11 + [10]*3
-# deck_left = [0] + [0] * 11 + [10]*3
-# deck_right = [0] + [0] * 11 + [10]*3
 my_decks = {'cent': deck_cent, 'left': deck_left, 'right': deck_right}
 
 top_cards = {'cent': generate_card(my_decks['cent']), 'left': generate_card(my_decks['left']),
@@ -36,23 +33,56 @@ top_cards = {'cent': generate_card(my_decks['cent']), 'left': generate_card(my_d
 inv_list = [generate_inv() for i in range(0, 3)]
 war = 0
 traded_tools = [0] * 3
+traded_res = [0] * 6
+to_build = -1
 
 
 class Player:
-    def __init__(self):
+    def __init__(self, name):
+        self.wonder = name
+        self.can_build_stage = [0, -1]
+        self.wonder_point = [0] * 5
+        self.counter_stages = 0
+
         self.data = [0] * 14
         self.inv = [0] + [0] * 15
         self.score = 0
         self.cat = False
         self.can_use_cat = False
 
+        if name == 'alexandria':
+            self.wonder_point = [4, 3, 6, 5, 7]
+        elif name == 'babylon':
+            self.wonder_point = [3, 0, 5, 5, 7]
+
+        if name == 'rhodes':
+            self.can_build_stage[1] = 1
+        elif name == 'artemis':
+            self.can_build_stage = [0, -1, -1]
+
 
 at_turn = 0
-player = [Player(), Player()]
+player = [Player('babylon'), Player('alexandria')]
 flags = {'build': 0, 'draw': 1, 'inv': 0}
 
 
 class MyFrame(wx.Frame):
+
+    def end_game(self):
+        score_0 = player[0].data[6]*2 + player[0].data[7]*3 + player[0].data[13]*3 + player[0].score
+        score_1 = player[1].data[6]*2 + player[1].data[7]*3 + player[1].data[13]*3 + player[1].score
+
+        text0 = wx.StaticText(self.panel, label=str(score_0), pos=(100, self.GetSize()[1] - 200 - self.wonder_leftside.GetSize()[1]//3))
+        text1 = wx.StaticText(self.panel, label=str(score_1), pos=(self.GetSize()[0] - 450, self.GetSize()[1] - 200 - self.wonder_rightside.GetSize()[1]//3))
+
+        font = text0.GetFont()
+        font.SetPointSize(20)
+        text0.SetFont(font)
+        text1.SetFont(font)
+
+        flags['build'] = -1
+        flags['draw'] = -1
+        flags['inv'] = -1
 
     def war_update(self, horns):
         global war
@@ -113,9 +143,95 @@ class MyFrame(wx.Frame):
         if exert[0] == exert[1] == exert[2]:
             c1 = exert[0]
         for i in exert:
-            c2 += i//2
+            c2 += i // 2
 
         flags['inv'] = max(c1, c2)
+
+    def resource_update(self):
+        res_exert = player[at_turn].data[:6]
+        count_unique = 0
+        count_max_same = 0
+
+        for i in range(5):
+            if res_exert[i] > 0:
+                count_unique += 1
+                count_max_same = max(count_max_same, res_exert[i])
+
+        count_unique += res_exert[5]
+        count_max_same += res_exert[5]
+
+        for int in player[at_turn].can_build_stage:
+            if int == -1:
+                continue
+
+            if ((int == 0 and count_unique >= 2) or
+                    (int == 1 and count_max_same >= 2) or
+                    (int == 2 and count_unique >= 3) or
+                    (int == 3 and count_max_same >= 3) or
+                    (int == 4 and count_unique >= 4)):
+                flags['build'] = 1
+                self.builders[at_turn].Show()
+
+    def builder_click(self):
+        global to_build
+        global traded_res
+        exert = player[at_turn].data[:6]
+        self.open_res_dialog(exert)
+
+        # UPDATE PLAYER DATA
+        for i in range(6):
+            player[at_turn].data[i] -= traded_res[i]
+
+        if player[at_turn].wonder in ['alexandria', 'gizeh']:
+            player[at_turn].can_build_stage[0] = to_build + 1
+        elif player[at_turn].wonder == 'babylon':
+            if to_build < 2:
+                player[at_turn].can_build_stage[0] = to_build + 1
+            elif to_build == 2:
+                player[at_turn].can_build_stage[0] = 3
+                player[at_turn].can_build_stage[1] = 4
+            else:
+                player[at_turn].can_build_stage[player[at_turn].can_build_stage.index(to_build)] = -1
+
+        # RE-DRAW RESOURCES minus TRADED_TOOLS
+        tl_client = wx.ClientDC(self.panel)
+        tl_client.SetBackground(wx.Brush("WHITE"))
+        for i in range(6):
+            # UPDATE VISUALS
+            tl_client.DrawBitmap(self.blank_tile, 42 + (58 * i) + (at_turn * (self.GetSize()[0] - 532)),
+                                 self.GetSize()[1] - 200)
+            if player[at_turn].data[i] >= 1:
+                tl_client.DrawBitmap(self.icons.GetSubBitmap((58 * i, 0, 58, 58)),
+                                     42 + (58 * i) + (at_turn * (self.GetSize()[0] - 532)), self.GetSize()[1] - 200)
+                if player[at_turn].data[i] >= 2:
+                    tl_client.DrawCircle(42 + (58 * i) + 50 + (at_turn * (self.GetSize()[0] - 532)),
+                                         self.GetSize()[1] - 200 + 50, 7)
+                    tl_client.DrawText(str(player[at_turn].data[i]),
+                                       42 + (58 * i) + 47 + (at_turn * (self.GetSize()[0] - 532)),
+                                       self.GetSize()[1] - 200 + 43)
+
+        # DRAW NEW WONDER STAGE
+        if at_turn == 0:
+            temp_left = self.wonder_leftside.GetSubBitmap((350*(to_build + 1), 315, 350, 315))
+            tl_client.DrawBitmap(temp_left, 100, self.GetSize()[1] - 200 - temp_left.GetSize()[1], True)
+        else:
+            temp_right = self.wonder_rightside.GetSubBitmap((350 * (to_build + 1), 472, 350, 472))
+            tl_client.DrawBitmap(temp_right, self.GetSize()[0] - 450, self.GetSize()[1] - 200 - temp_right.GetSize()[1], True)
+
+        # CHECK END GAME
+        player[at_turn].counter_stages += 1
+        player[at_turn].score += player[at_turn].wonder_point[to_build]
+        if player[at_turn].counter_stages == 5:
+            self.end_game()
+            return False
+
+        flags['build'] = 0
+        to_build = -1
+        traded_res = [0] * 6
+        self.builders[at_turn].Hide()
+
+        self.resource_update()
+        self.next_turn_checker()
 
     def next_turn_checker(self):
         global at_turn
@@ -145,8 +261,10 @@ class MyFrame(wx.Frame):
 
         res_client.DrawBitmap(self.icons.GetSubBitmap((58 * (id - 1), 0, 58, 58)), coords[0], coords[1])
         if player[at_turn].data[id - 1] > 1:
-            res_client.DrawCircle(coords[0] + 50, coords[1] + 50, 10)
+            res_client.DrawCircle(coords[0] + 50, coords[1] + 50, 7)
             res_client.DrawText(str(player[at_turn].data[id - 1]), coords[0] + 47, coords[1] + 43)
+
+        self.resource_update()
 
     def handle_civil(self, id):
         civ_client = wx.ClientDC(self.panel)
@@ -239,11 +357,13 @@ class MyFrame(wx.Frame):
         exert = player[at_turn].data[10:13]
 
         if (exert[0] >= 1 and exert[1] >= 1 and exert[2] >= 1) and (exert[0] >= 2 or exert[1] >= 2 or exert[2] >= 2):
-            pass#trigger window
-        elif (exert[0] == 0 and exert[1] >= 2 and exert[2] >= 2) or (exert[0] >= 2 and exert[1] == 0 and exert[2] >= 2) or (exert[0] >= 2 and exert[1] >= 2 and exert[2] == 0):
-            pass#trigger window
+            pass  #trigger window
+        elif (exert[0] == 0 and exert[1] >= 2 and exert[2] >= 2) or (
+                exert[0] >= 2 and exert[1] == 0 and exert[2] >= 2) or (
+                exert[0] >= 2 and exert[1] >= 2 and exert[2] == 0):
+            pass  #trigger window
 
-        self.on_open_panel(exert)
+        self.open_dialog(exert)
 
         # RE-DRAW TOOLS minus TRADED_TOOLS
         tl_client = wx.ClientDC(self.panel)
@@ -254,17 +374,20 @@ class MyFrame(wx.Frame):
             traded_tools[i] = 0
 
             # UPDATE VISUALS
-            tl_client.DrawBitmap(self.blank_tile, 42 + (58*i) + (at_turn*(self.GetSize()[0] - 532)), self.GetSize()[1] - 142)
+            tl_client.DrawBitmap(self.blank_tile, 42 + (58 * i) + (at_turn * (self.GetSize()[0] - 532)),
+                                 self.GetSize()[1] - 142)
             if player[at_turn].data[10 + i] >= 1:
-                tl_client.DrawBitmap(self.icons.GetSubBitmap((580 + 58*i, 0, 58, 58)), 42 + (58*i) + (at_turn*(self.GetSize()[0] - 532)), self.GetSize()[1] - 142)
+                tl_client.DrawBitmap(self.icons.GetSubBitmap((580 + 58 * i, 0, 58, 58)),
+                                     42 + (58 * i) + (at_turn * (self.GetSize()[0] - 532)), self.GetSize()[1] - 142)
                 if player[at_turn].data[10 + i] >= 2:
-                    tl_client.DrawCircle(42 + (58*i) + 50 + (at_turn*(self.GetSize()[0] - 532)), self.GetSize()[1] - 142 + 50, 7)
-                    tl_client.DrawText(str(player[at_turn].data[10 + i]), 42 + (58*i) + 47 + (at_turn*(self.GetSize()[0] - 532)), self.GetSize()[1] - 142 + 43)
-
-
+                    tl_client.DrawCircle(42 + (58 * i) + 50 + (at_turn * (self.GetSize()[0] - 532)),
+                                         self.GetSize()[1] - 142 + 50, 7)
+                    tl_client.DrawText(str(player[at_turn].data[10 + i]),
+                                       42 + (58 * i) + 47 + (at_turn * (self.GetSize()[0] - 532)),
+                                       self.GetSize()[1] - 142 + 43)
 
     def draw_invention(self, event):
-        if flags['inv'] == 0:
+        if flags['inv'] < 1:
             return False
 
         # DETERMINE WHICH BUTTON IS PRESSED
@@ -295,7 +418,9 @@ class MyFrame(wx.Frame):
 
         #   VISUALIZE TAKEN INVENTION
         dc2.DrawBitmap(
-            self.inv_tokens_small.GetSubBitmap((58 * (inv_list[which_one] % 4), 58 * (inv_list[which_one] // 4), 58, 58)), at_turn*(self.GetSize()[0] - 492) + 58*(player[at_turn].inv[0] - 1), self.GetSize()[1] - 75)
+            self.inv_tokens_small.GetSubBitmap(
+                (58 * (inv_list[which_one] % 4), 58 * (inv_list[which_one] // 4), 58, 58)),
+            at_turn * (self.GetSize()[0] - 492) + 58 * (player[at_turn].inv[0] - 1), self.GetSize()[1] - 75)
 
         #   VISUALIZE NEW INVENTION
         inv_list[which_one] = generate_inv()
@@ -457,10 +582,110 @@ class MyFrame(wx.Frame):
         # LABEL POSITION
         self.label.SetPosition((frame_size[0] // 2 - self.label.GetSize()[0] // 2, frame_size[1] // 2 - 150))
 
-    def on_open_panel(self, tools):
+        # BUILD BUTTON
+        button_build_0 = wx.Button(self.panel, label='Build', pos=(42, self.GetSize()[1] - 230))
+        button_build_1 = wx.Button(self.panel, label='Build',
+                                   pos=(42 + self.GetSize()[0] - 532, self.GetSize()[1] - 230))
+
+        self.builders = [button_build_0, button_build_1]
+
+        button_build_0.SetSize((58, button_build_0.GetSize()[1]))
+        button_build_1.SetSize((58, button_build_1.GetSize()[1]))
+
+        button_build_0.Bind(wx.EVT_BUTTON, lambda event: self.builder_click())
+        button_build_1.Bind(wx.EVT_BUTTON, lambda event: self.builder_click())
+
+        button_build_0.Hide()
+        button_build_1.Hide()
+
+    def open_dialog(self, tools):
         new_panel = SeamlessPanel(self, tools)
         new_panel.ShowModal()
         new_panel.Destroy()
+
+    def open_res_dialog(self, res):
+        new_panel = SeamlessResPanel(self, res)
+        new_panel.ShowModal()
+        new_panel.Destroy()
+
+
+class SeamlessResPanel(wx.Dialog):
+
+    def __init__(self, parent, res):
+        super().__init__(parent, title='Choose what resources to spend', style=wx.NO_BORDER | wx.DEFAULT_DIALOG_STYLE)
+        self.res = res
+
+        panel = wx.Panel(self)
+
+        # BUTTONS
+        self.icons = wx.Bitmap('Assets/main_icons.png', wx.BITMAP_TYPE_PNG)
+        self.buttons = []
+        self.nums = []
+        for i in range(6):
+            btn = wx.BitmapButton(panel, bitmap=self.icons.GetSubBitmap((58 * i, 0, 58, 58)),
+                                  pos=(3 + i * 68, 20))
+            btn.Bind(wx.EVT_BUTTON, self.on_button_click)
+            if res[i] < 1:
+                btn.Hide()
+                self.nums.append(None)
+            else:
+                num = wx.StaticText(panel, label=str(self.res[i]),
+                                    pos=(i * 68 + btn.GetSize()[0] // 2 + 3, btn.GetSize()[1] + 25))
+                self.nums.append(num)
+            self.buttons.append(btn)
+
+        # Button to close the dialog
+        close_button = wx.Button(panel, size=(self.buttons[1].GetSize()[0], 20), label="Send",
+                                 pos=(self.buttons[2].GetPosition()[0] + 5 + self.buttons[3].GetSize()[0] // 2,
+                                      self.buttons[1].GetPosition()[0] + 50))
+        close_button.Bind(wx.EVT_BUTTON, self.on_send)
+
+        question = wx.StaticText(panel, label='Which stage to build?', pos=(10, self.buttons[1].GetPosition()[0] + 50))
+
+        for i, choice in enumerate(player[at_turn].can_build_stage):
+            if choice == -1:
+                continue
+            temp_rad = wx.RadioButton(panel, name=str(choice), label='Stage ' + str(choice),
+                                      pos=(10, self.buttons[1].GetPosition()[0] + 70 + (i * 20)))
+            temp_rad.Bind(wx.EVT_RADIOBUTTON, self.radio_click)
+
+        self.SetPosition((400, 300))
+        self.SetSize((self.buttons[0].GetSize()[0] * 6 + 56, 300))
+
+    def radio_click(self, event):
+        global to_build
+        radio = event.GetEventObject()
+        name = radio.GetName()
+        to_build = int(name)
+
+    def on_button_click(self, event):
+        button = event.GetEventObject()
+        index = self.buttons.index(button)
+        if self.res[index] == 0:
+            return False
+        self.res[index] -= 1
+        traded_res[index] += 1
+        self.nums[index].SetLabel(str(self.res[index]))
+
+    def on_send(self, event):
+        t = traded_res
+        count_unique = 0
+        count_max_same = 0
+
+        for i in range(5):
+            if t[i] > 0:
+                count_unique += 1
+                count_max_same = max(count_max_same, t[i])
+
+        count_unique += t[5]
+        count_max_same += t[5]
+
+        if ((to_build == 0 and count_unique >= 2) or
+                (to_build == 1 and count_max_same >= 2) or
+                (to_build == 2 and count_unique >= 3) or
+                (to_build == 3 and count_max_same >= 3) or
+                (to_build == 4 and count_unique >= 4)):
+            self.Close()
 
 
 class SeamlessPanel(wx.Dialog):
@@ -475,22 +700,25 @@ class SeamlessPanel(wx.Dialog):
         self.buttons = []
         self.nums = []
         for i in range(3):
-            btn = wx.BitmapButton(panel, bitmap=self.icons.GetSubBitmap((580 + (58*i), 0, 58, 58)), pos=(3 + i*68, 20))
+            btn = wx.BitmapButton(panel, bitmap=self.icons.GetSubBitmap((580 + (58 * i), 0, 58, 58)),
+                                  pos=(3 + i * 68, 20))
             btn.Bind(wx.EVT_BUTTON, self.on_button_click)
             if tools[i] < 1:
                 btn.Hide()
                 self.nums.append(None)
             else:
-                num = wx.StaticText(panel, label=str(self.tools[i]), pos=(i * 68 + btn.GetSize()[0]//2 + 3, btn.GetSize()[1] + 25))
+                num = wx.StaticText(panel, label=str(self.tools[i]),
+                                    pos=(i * 68 + btn.GetSize()[0] // 2 + 3, btn.GetSize()[1] + 25))
                 self.nums.append(num)
             self.buttons.append(btn)
 
         # Button to close the dialog
-        close_button = wx.Button(panel, size=(self.buttons[1].GetSize()[0], 20), label="Send", pos=(self.buttons[1].GetPosition()[0], self.buttons[1].GetPosition()[0] + 50))
+        close_button = wx.Button(panel, size=(self.buttons[1].GetSize()[0], 20), label="Send",
+                                 pos=(self.buttons[1].GetPosition()[0], self.buttons[1].GetPosition()[0] + 50))
         close_button.Bind(wx.EVT_BUTTON, self.on_send)
 
         self.SetPosition((400, 300))
-        self.SetSize((self.buttons[0].GetSize()[0]*3 + 26, 200))
+        self.SetSize((self.buttons[0].GetSize()[0] * 3 + 26, 200))
 
     def on_button_click(self, event):
         button = event.GetEventObject()
@@ -505,6 +733,7 @@ class SeamlessPanel(wx.Dialog):
         t = traded_tools
         if (t[0] >= 1 and t[1] >= 1 and t[2] >= 1) or (t[0] >= 2 or t[1] >= 2 or t[2] >= 2):
             self.Close()
+
 
 class MyPanel(wx.Panel):
     def __init__(self, parent):
