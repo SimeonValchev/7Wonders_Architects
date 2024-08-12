@@ -4,6 +4,9 @@ import time
 
 
 def generate_card(deck):
+    if deck[0] == 0:
+        return -1
+
     rand_int = random.randint(1, 14)
     while deck[rand_int] == 0:
         rand_int = random.randint(1, 14)
@@ -20,9 +23,10 @@ def generate_inv():
     return rand_int_inv
 
 
-# MAIN MAIN MAIN
+# MAIN
 inventions = [0] + [1] * 15
 
+print()
 print('CHOOSE FROM: alexandria, artemis, babylon, gizeh, hallicarnas, rhodes, zeus')
 w1 = input('Player 1: ')
 w2 = input('Player 2: ')
@@ -37,6 +41,7 @@ deck_zus = [25, 1, 2, 2, 2, 2, 3, 3, 1, 2, 2, 1, 1, 1, 2]
 
 dictionary_decks = {'alexandria':deck_alx, 'artemis':deck_art, 'babylon':deck_bab, 'gizeh':deck_giz, 'hallicarnas':deck_hal, 'rhodes':deck_rho, 'zeus':deck_zus }
 
+# INIT DECKS TO PLAY
 deck_cent = [0] + ([4] * 5) + [6, 8, 4, 4, 4, 2] + ([4] * 3)
 deck_left = dictionary_decks[w1]
 deck_right = dictionary_decks[w2]
@@ -46,11 +51,19 @@ my_decks = {'cent': deck_cent, 'left': deck_left, 'right': deck_right}
 top_cards = {'cent': generate_card(my_decks['cent']), 'left': generate_card(my_decks['left']),
              'right': generate_card(my_decks['right'])}
 
+# INIT VARIABLES
 inv_list = [generate_inv() for i in range(0, 3)]
 war = 0
+
+#   vars used to communicate with dialog windows
 traded_tools = [0] * 3
 traded_res = [0] * 6
 to_build = -1
+
+# INVENTION REGISTERS
+double_gold_used = False
+ignore_requ_used = False
+use_ignore_reque = False
 
 
 class Player:
@@ -97,8 +110,33 @@ flags = {'build': 0, 'draw': 1, 'inv': 0}
 class MyFrame(wx.Frame):
 
     def end_game(self):
-        score_0 = player[0].data[6]*2 + player[0].data[7]*3 + player[0].data[13]*3 + player[0].score
-        score_1 = player[1].data[6]*2 + player[1].data[7]*3 + player[1].data[13]*3 + player[1].score
+        #         cats                 + cat-inv             civil-3               war tokens             wonder points
+        score_0 = player[0].data[6]*(2 + player[0].inv[2]) + player[0].data[7]*3 + player[0].data[13]*(3 + player[0].inv[8]) + player[0].score
+        score_1 = player[1].data[6]*(2 + player[1].inv[2]) + player[1].data[7]*3 + player[1].data[13]*(3 + player[0].inv[8]) + player[1].score
+
+        # INV      4/6 inv                                                2 per token-token
+        score_0 += player[0].inv[6]*(4 + 2*player[0].counter_stages//5) + player[0].inv[12]*sum(player[0].inv)*2
+        score_1 += player[1].inv[6]*(4 + 2*player[1].counter_stages//5) + player[1].inv[12]*sum(player[1].inv)*2
+
+        # CAT TOKEN
+        if player[0].cat:
+            score_0 += 2
+        elif player[1].cat:
+            score_1 += 2
+
+        # INV      4/12 tokes
+        four_tw_0 = player[0].inv[11] + player[0].inv[13]
+        four_tw_1 = player[1].inv[11] + player[1].inv[13]
+
+        if four_tw_0 == 1:
+            score_0 += 4
+        elif four_tw_0 == 2:
+            score_0 += 12
+
+        if four_tw_1 == 1:
+            score_1 += 4
+        elif four_tw_1 == 2:
+            score_1 += 12
 
         text0 = wx.StaticText(self.panel, label=str(score_0), pos=(100, self.GetSize()[1] - 200 - self.wonder_leftside.GetSize()[1]//3))
         text1 = wx.StaticText(self.panel, label=str(score_1), pos=(self.GetSize()[0] - 450, self.GetSize()[1] - 200 - self.wonder_rightside.GetSize()[1]//3))
@@ -177,6 +215,10 @@ class MyFrame(wx.Frame):
 
     def resource_update(self):
         res_exert = player[at_turn].data[:6]
+
+        if player[at_turn].inv[5] == 1 and player[at_turn].data[5] >= 1 and not double_gold_used:
+            player[at_turn].data[5] += 1
+
         count_unique = 0
         count_max_same = 0
 
@@ -200,9 +242,15 @@ class MyFrame(wx.Frame):
                 flags['build'] = 1
                 self.builders[at_turn].Show()
 
+            if player[at_turn].inv[14] == 1 and not ignore_requ_used and ((int in [0, 1] and sum(res_exert) >= 2) or (int in [2, 3] and sum(res_exert) >= 3) or (int == 4 and sum(res_exert) >= 4)):
+                flags['build'] = 1
+                self.builders[at_turn].Show()
+
     def builder_click(self):
         global to_build
         global traded_res
+        global double_gold_used
+
         exert = player[at_turn].data[:6]
         self.open_res_dialog(exert)
 
@@ -210,6 +258,9 @@ class MyFrame(wx.Frame):
         #   resources
         for i in range(6):
             player[at_turn].data[i] -= traded_res[i]
+
+        if player[at_turn].inv[5] == 1 and player[at_turn].data[5] == 0:
+            double_gold_used = True
 
         #   build_stages
         if player[at_turn].wonder in ['alexandria', 'gizeh']:
@@ -286,6 +337,31 @@ class MyFrame(wx.Frame):
             temp_right = self.wonder_rightside.GetSubBitmap((350 * (to_build + 1), self.w2_heit, 350, self.w2_heit))
             tl_client.DrawBitmap(temp_right, self.GetSize()[0] - 450, self.GetSize()[1] - 200 - temp_right.GetSize()[1], True)
 
+        # SPECIAL WONDER ABILITY
+        if player[at_turn].wonder == 'rhodes' and to_build in [1, 3]:
+            self.handle_war(9)
+
+        elif player[at_turn].wonder in ['alexandria', 'hallicarnas'] and to_build in [1, 3]:
+            flags['draw'] += 1
+
+        elif player[at_turn].wonder == 'artemis' and to_build in [1, 2, 3]:
+            flags['draw'] += 1
+            self.draw_card('cent')
+
+        elif player[at_turn].wonder == 'babylon' and to_build in [1,3]:
+            player[at_turn].data[12] += 2
+            flags['inv'] += 1
+
+        elif player[at_turn].wonder == 'zeus' and to_build in [1,3]:
+            flags['draw'] += 2
+            self.draw_card('left')
+            self.draw_card('right')
+
+        # INVENTION ARCHITECT (draw after building)
+        if player[at_turn].inv[7] == 1:
+            flags['draw'] += 1
+
+
         # CHECK END GAME
         player[at_turn].counter_stages += 1
         player[at_turn].score += player[at_turn].wonder_point[to_build]
@@ -303,8 +379,12 @@ class MyFrame(wx.Frame):
 
     def next_turn_checker(self):
         global at_turn
+        global double_gold_used
+
         if list(flags.values()) == [0, 0, 0]:
             at_turn = (at_turn + 1) % 2
+
+            double_gold_used = False
             flags['draw'] = 1
             player[at_turn].can_use_cat = player[at_turn].cat
 
@@ -469,6 +549,8 @@ class MyFrame(wx.Frame):
         if flags['inv'] < 1:
             return False
 
+        mystery = -1
+
         # DETERMINE WHICH BUTTON IS PRESSED
         x, y = event.GetPosition()
         frame = self.GetSize()
@@ -477,7 +559,11 @@ class MyFrame(wx.Frame):
         if frame[0] - 480 > x or x > frame[0] - 50 or 50 > y or y > 150:
             return False
         else:
-            if frame[0] - 270 > x > frame[0] - 370:
+            if frame[0] - 380 > x > frame[0] - 480:
+                mystery = generate_inv()
+                which_one = 3
+
+            elif frame[0] - 270 > x > frame[0] - 370:
                 which_one = 0
             elif frame[0] - 160 > x > frame[0] - 260:
                 which_one = 1
@@ -488,24 +574,44 @@ class MyFrame(wx.Frame):
             return False
 
         # GIVE INVENTION TO PLAYER
-        player[at_turn].inv[inv_list[which_one]] = 1
+        if which_one == 3:
+            player[at_turn].inv[mystery] = 1
+        else:
+            player[at_turn].inv[inv_list[which_one]] = 1
+
         player[at_turn].inv[0] += 1
+
+        if mystery == 9:
+            self.handle_war(9)
+            self.handle_war(9)
+
+        # WAR INVENTION
+        if which_one != 3 and inv_list[which_one] == 9:
+            self.handle_war(9)
+            self.handle_war(9)
 
         # GENERATE NEW INVENTION AND UPDATE VISUALS
         dc2 = wx.ClientDC(self.panel)
         dc2.SetBackground(wx.Brush("WHITE"))
 
-        #   VISUALIZE TAKEN INVENTION
-        dc2.DrawBitmap(
-            self.inv_tokens_small.GetSubBitmap(
-                (58 * (inv_list[which_one] % 4), 58 * (inv_list[which_one] // 4), 58, 58)),
-            at_turn * (self.GetSize()[0] - 492) + 58 * (player[at_turn].inv[0] - 1), self.GetSize()[1] - 75)
+        if which_one == 3:
+            #   VISUALIZE TAKEN INVENTION if MYSTERY
+            dc2.DrawBitmap(
+                self.inv_tokens_small.GetSubBitmap(
+                    (58 * (mystery % 4), 58 * (mystery // 4), 58, 58)),
+                at_turn * (self.GetSize()[0] - 492) + 58 * (player[at_turn].inv[0] - 1), self.GetSize()[1] - 75)
+        else:
+            #   VISUALIZE TAKEN INVENTION if not MYSTERY
+            dc2.DrawBitmap(
+                self.inv_tokens_small.GetSubBitmap(
+                    (58 * (inv_list[which_one] % 4), 58 * (inv_list[which_one] // 4), 58, 58)),
+                at_turn * (self.GetSize()[0] - 492) + 58 * (player[at_turn].inv[0] - 1), self.GetSize()[1] - 75)
 
-        #   VISUALIZE NEW INVENTION
-        inv_list[which_one] = generate_inv()
-        dc2.DrawBitmap(
-            self.inv_tokens.GetSubBitmap((100 * (inv_list[which_one] % 4), 100 * (inv_list[which_one] // 4), 100, 100)),
-            self.GetSize()[0] - 370 + 110 * which_one, 50, True)
+            #   VISUALIZE NEW INVENTION
+            inv_list[which_one] = generate_inv()
+            dc2.DrawBitmap(
+                self.inv_tokens.GetSubBitmap((100 * (inv_list[which_one] % 4), 100 * (inv_list[which_one] // 4), 100, 100)),
+                self.GetSize()[0] - 370 + 110 * which_one, 50, True)
 
         #   UPDATE TOOLS
         self.tool_update()
@@ -514,6 +620,10 @@ class MyFrame(wx.Frame):
         self.next_turn_checker()
 
     def draw_card(self, which_deck):
+        if flags['draw'] <= 0:
+            return False
+
+        # UPDATE LABEL
         if which_deck == 'cent':
             self.c1.SetLabel(str(int(self.c1.GetLabel()) - 1))
         elif which_deck == 'left':
@@ -521,23 +631,42 @@ class MyFrame(wx.Frame):
         else:
             self.c3.SetLabel(str(int(self.c3.GetLabel()) - 1))
 
-        if flags['draw'] <= 0:
-            return False
-
+        # EVENT HANDLER
         temp_card = top_cards[which_deck]
         if temp_card <= 6:
+            if temp_card in [1, 3] and player[at_turn].inv[3] == 1:
+                flags['draw'] += 1
+            elif temp_card in [2, 6] and player[at_turn].inv[4] == 1:
+                flags['draw'] += 1
+            elif temp_card in [4, 5] and player[at_turn].inv[15] == 1:
+                flags['draw'] += 1
             self.handle_resource(temp_card)
+
         elif temp_card in [7, 8]:
             self.handle_civil(temp_card)
+
         elif temp_card in [9, 10, 11]:
+            if temp_card in [10, 11] and player[at_turn].inv[10] == 1:
+                flags['draw'] += 1
             self.handle_war(temp_card)
+
         elif temp_card in [12, 13, 14]:
+            if player[at_turn].inv[1] == 1:
+                flags['draw'] += 1
             self.handle_inv(temp_card)
 
         # UPDATE VISUALS
         my_decks[which_deck][top_cards[which_deck]] -= 1
+        my_decks[which_deck][0] -= 1
         top_cards[which_deck] = generate_card(my_decks[which_deck])
-        if which_deck != 'cent':
+
+        if top_cards[which_deck] == -1:
+            # -1 if deck is empty, unbind button
+            print('unbinded')
+            self.list_buttons[which_deck].SetBitmap(self.cards.GetSubBitmap((0, 0, 100, 148)))
+            self.list_buttons[which_deck].Unbind(wx.EVT_BUTTON)
+
+        elif which_deck != 'cent':
             self.list_buttons[which_deck].SetBitmap(self.cards.GetSubBitmap((100 * top_cards[which_deck], 0, 100, 148)))
         else:
             player[at_turn].can_use_cat = False
@@ -615,8 +744,8 @@ class MyFrame(wx.Frame):
         self.wonder_leftside = wx.Bitmap('Assets/wonder_' + w1 + '.png', wx.BITMAP_TYPE_PNG)
         self.wonder_rightside = wx.Bitmap('Assets/wonder_' + w2 + '.png', wx.BITMAP_TYPE_PNG)
 
-        self.w1_heit = self.wonder_leftside.GetSize()[1]//3
-        self.w2_heit = self.wonder_rightside.GetSize()[1]//3
+        self.w1_heit = 1 + self.wonder_leftside.GetSize()[1]//3
+        self.w2_heit = 1 + self.wonder_rightside.GetSize()[1]//3
 
         frame_size = self.GetSize()
         # [0] - WIDTH - 1538
@@ -632,7 +761,7 @@ class MyFrame(wx.Frame):
         self.panel.Bind(wx.EVT_PAINT, self.OnPaint)
 
         # QUIT BUTTON
-        button_quit = wx.BitmapButton(self.panel, bitmap=quit_image, style=wx.NO_BORDER, pos=(frame_size[0] - 30, 0))
+        button_quit = wx.BitmapButton(self.panel, bitmap=quit_image, style=wx.NO_BORDER, pos=(frame_size[0] - 35, 5))
 
         button_quit.Bind(wx.EVT_BUTTON, lambda event: self.Close())
         button_quit.Bind(wx.EVT_ENTER_WINDOW, lambda event: button_quit.SetBitmap(quit_image_hover))
@@ -734,8 +863,8 @@ class SeamlessResPanel(wx.Dialog):
                                       self.buttons[1].GetPosition()[0] + 50))
         close_button.Bind(wx.EVT_BUTTON, self.on_send)
 
+        # RADIO BUTTONS
         question = wx.StaticText(panel, label='Which stage to build?', pos=(10, self.buttons[1].GetPosition()[0] + 50))
-
         for i, choice in enumerate(player[at_turn].can_build_stage):
             if choice == -1:
                 continue
@@ -743,8 +872,21 @@ class SeamlessResPanel(wx.Dialog):
                                       pos=(10, self.buttons[1].GetPosition()[0] + 70 + (i * 20)))
             temp_rad.Bind(wx.EVT_RADIOBUTTON, self.radio_click)
 
+        # IGNORE REQ INVENTION
+        if player[at_turn].inv[14] == 1 and not ignore_requ_used:
+            self.checkbox = wx.CheckBox(panel, label="Use Ignore Requirements", pos=(150, 150))
+            self.checkbox.Bind(wx.EVT_CHECKBOX, self.on_check)
+
         self.SetPosition((400, 300))
         self.SetSize((self.buttons[0].GetSize()[0] * 6 + 56, 300))
+
+    def on_check(self, event):
+        global use_ignore_reque
+
+        if self.checkbox.IsChecked():
+            use_ignore_reque = True
+        else:
+            use_ignore_reque = False
 
     def radio_click(self, event):
         global to_build
@@ -762,6 +904,8 @@ class SeamlessResPanel(wx.Dialog):
         self.nums[index].SetLabel(str(self.res[index]))
 
     def on_send(self, event):
+        global ignore_requ_used
+
         t = traded_res
         count_unique = 0
         count_max_same = 0
@@ -779,6 +923,10 @@ class SeamlessResPanel(wx.Dialog):
                 (to_build == 2 and count_unique >= 3) or
                 (to_build == 3 and count_max_same >= 3) or
                 (to_build == 4 and count_unique >= 4)):
+            self.Close()
+
+        if use_ignore_reque and ((to_build in [0,1] and sum(t) >= 2) or (to_build in [2,3] and sum(t) >= 3) or (to_build == 4 and sum(t) >= 4)):
+            ignore_requ_used = True
             self.Close()
 
 
