@@ -22,9 +22,25 @@ def generate_inv():
 
 # MAIN MAIN MAIN
 inventions = [0] + [1] * 15
-deck_cent = [0] + [10] * 14
-deck_left = [0] + [10]*6 + [0] * 14
-deck_right = [0] + [10] * 14
+
+print('CHOOSE FROM: alexandria, artemis, babylon, gizeh, hallicarnas, rhodes, zeus')
+w1 = input('Player 1: ')
+w2 = input('Player 2: ')
+
+deck_alx = [25, 2, 2, 2, 2, 1, 4, 2, 2, 2, 1, 1, 1, 2, 1]
+deck_art = [25, 2, 2, 2, 2, 2, 3, 2, 1, 2, 1, 1, 2, 1, 2]
+deck_bab = [25, 2, 1, 2, 2, 2, 3, 2, 2, 2, 1, 1, 2, 2, 1]
+deck_giz = [25, 2, 2, 1, 2, 2, 3, 3, 2, 2, 2, 0, 2, 1, 1]
+deck_hal = [25, 2, 2, 2, 1, 2, 3, 2, 2, 2, 2, 1, 1, 1, 2]
+deck_rho = [25, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 1]
+deck_zus = [25, 1, 2, 2, 2, 2, 3, 3, 1, 2, 2, 1, 1, 1, 2]
+
+dictionary_decks = {'alexandria':deck_alx, 'artemis':deck_art, 'babylon':deck_bab, 'gizeh':deck_giz, 'hallicarnas':deck_hal, 'rhodes':deck_rho, 'zeus':deck_zus }
+
+deck_cent = [0] + ([4] * 5) + [6, 8, 4, 4, 4, 2] + ([4] * 3)
+deck_left = dictionary_decks[w1]
+deck_right = dictionary_decks[w2]
+
 my_decks = {'cent': deck_cent, 'left': deck_left, 'right': deck_right}
 
 top_cards = {'cent': generate_card(my_decks['cent']), 'left': generate_card(my_decks['left']),
@@ -50,11 +66,23 @@ class Player:
         self.cat = False
         self.can_use_cat = False
 
+        # WONDER POINTS
         if name == 'alexandria':
             self.wonder_point = [4, 3, 6, 5, 7]
+        elif name == 'artemis':
+            self.wonder_point = [3, 3, 4, 5, 7]
         elif name == 'babylon':
             self.wonder_point = [3, 0, 5, 5, 7]
+        elif name == 'gizeh':
+            self.wonder_point = [4, 5, 6, 7, 8]
+        elif name == 'hallicarnas':
+            self.wonder_point = [3, 3, 6, 5, 7]
+        elif name == 'rhodes':
+            self.wonder_point = [4, 4, 5, 6, 7]
+        elif name == 'zeus':
+            self.wonder_point = [3, 2, 5, 5, 7]
 
+        # WONDER STAGES
         if name == 'rhodes':
             self.can_build_stage[1] = 1
         elif name == 'artemis':
@@ -62,7 +90,7 @@ class Player:
 
 
 at_turn = 0
-player = [Player('babylon'), Player('alexandria')]
+player = [Player(w1), Player(w2)]
 flags = {'build': 0, 'draw': 1, 'inv': 0}
 
 
@@ -179,9 +207,11 @@ class MyFrame(wx.Frame):
         self.open_res_dialog(exert)
 
         # UPDATE PLAYER DATA
+        #   resources
         for i in range(6):
             player[at_turn].data[i] -= traded_res[i]
 
+        #   build_stages
         if player[at_turn].wonder in ['alexandria', 'gizeh']:
             player[at_turn].can_build_stage[0] = to_build + 1
         elif player[at_turn].wonder == 'babylon':
@@ -192,6 +222,44 @@ class MyFrame(wx.Frame):
                 player[at_turn].can_build_stage[1] = 4
             else:
                 player[at_turn].can_build_stage[player[at_turn].can_build_stage.index(to_build)] = -1
+
+        elif player[at_turn].wonder == 'artemis':
+            if to_build == 0:
+                player[at_turn].can_build_stage = [1, 2, 3]
+            else:
+                player[at_turn].can_build_stage[player[at_turn].can_build_stage.index(to_build)] = -1
+            if player[at_turn].can_build_stage == [-1, -1, -1]:
+                player[at_turn].can_build_stage[0] = 4
+
+        elif player[at_turn].wonder == 'hallicarnas':
+            if to_build == 0:
+                player[at_turn].can_build_stage[0] = 1
+            elif to_build == 1:
+                player[at_turn].can_build_stage = [2, 3]
+            else:
+                player[at_turn].can_build_stage[player[at_turn].can_build_stage.index(to_build)] = -1
+            if player[at_turn].can_build_stage == [-1, -1]:
+                player[at_turn].can_build_stage[0] = 4
+
+        elif player[at_turn].wonder == 'rhodes':
+            if to_build < 2:
+                player[at_turn].can_build_stage[player[at_turn].can_build_stage.index(to_build)] = -1
+            else:
+                player[at_turn].can_build_stage[0] += 1
+
+            if player[at_turn].can_build_stage == [-1, -1]:
+                player[at_turn].can_build_stage = [2, -1]
+
+        elif player[at_turn].wonder == 'zeus':
+            if to_build == 0:
+                player[at_turn].can_build_stage = [1, 2]
+            elif to_build < 3:
+                player[at_turn].can_build_stage[player[at_turn].can_build_stage.index(to_build)] = -1
+            else:
+                player[at_turn].can_build_stage[0] += 1
+
+            if player[at_turn].can_build_stage == [-1, -1]:
+                player[at_turn].can_build_stage[0] = 3
 
         # RE-DRAW RESOURCES minus TRADED_TOOLS
         tl_client = wx.ClientDC(self.panel)
@@ -212,10 +280,10 @@ class MyFrame(wx.Frame):
 
         # DRAW NEW WONDER STAGE
         if at_turn == 0:
-            temp_left = self.wonder_leftside.GetSubBitmap((350*(to_build + 1), 315, 350, 315))
+            temp_left = self.wonder_leftside.GetSubBitmap((350*(to_build + 1), self.w1_heit, 350, self.w1_heit))
             tl_client.DrawBitmap(temp_left, 100, self.GetSize()[1] - 200 - temp_left.GetSize()[1], True)
         else:
-            temp_right = self.wonder_rightside.GetSubBitmap((350 * (to_build + 1), 472, 350, 472))
+            temp_right = self.wonder_rightside.GetSubBitmap((350 * (to_build + 1), self.w2_heit, 350, self.w2_heit))
             tl_client.DrawBitmap(temp_right, self.GetSize()[0] - 450, self.GetSize()[1] - 200 - temp_right.GetSize()[1], True)
 
         # CHECK END GAME
@@ -271,11 +339,22 @@ class MyFrame(wx.Frame):
         civ_client.SetBackground(wx.Brush("WHITE"))
         player[at_turn].data[id - 1] += 1
 
+        # CAT HANDLER
         if id // 8 == 0:
             player[at_turn].cat = True
             player[at_turn].can_use_cat = True
-
             player[(at_turn + 1) % 2].cat = False
+
+            cat_token = wx.Bitmap('Assets/cat_token.png', wx.BITMAP_TYPE_PNG)
+            blank_cat = wx.Bitmap('Assets/blank_cat.png', wx.BITMAP_TYPE_PNG)
+            if at_turn == 0:
+                civ_client.DrawBitmap(blank_cat, 506, self.GetSize()[1] - 200)
+                civ_client.DrawBitmap(cat_token, 506, self.GetSize()[1] - 200)
+                civ_client.DrawBitmap(blank_cat, self.GetSize()[0] - 612, self.GetSize()[1] - 200)
+            else:
+                civ_client.DrawBitmap(blank_cat, 506, self.GetSize()[1] - 200)
+                civ_client.DrawBitmap(blank_cat, self.GetSize()[0] - 612, self.GetSize()[1] - 200)
+                civ_client.DrawBitmap(cat_token, self.GetSize()[0] - 612, self.GetSize()[1] - 200)
 
         coords = [0, self.GetSize()[1] - 142]
         if at_turn == 0:
@@ -292,7 +371,7 @@ class MyFrame(wx.Frame):
         # TOTAL
         #   icon
         civ_client.DrawBitmap(self.bonus_icons.GetSubBitmap((58, 0, 58, 58)), coords[0] + 58 * (10 - id), coords[1])
-        civ_client.DrawCircle(coords[0] + 50 + 58 * (10 - id), coords[1] + 50, 10)
+        civ_client.DrawCircle(coords[0] + 50 + 58 * (10 - id), coords[1] + 50, 7)
         civ_client.DrawText('Σ', coords[0] + 47 + 58 * (10 - id), coords[1] + 43)
         civ_client.SetPen(wx.TRANSPARENT_PEN)
         #   circle
@@ -435,6 +514,13 @@ class MyFrame(wx.Frame):
         self.next_turn_checker()
 
     def draw_card(self, which_deck):
+        if which_deck == 'cent':
+            self.c1.SetLabel(str(int(self.c1.GetLabel()) - 1))
+        elif which_deck == 'left':
+            self.c2.SetLabel(str(int(self.c2.GetLabel()) - 1))
+        else:
+            self.c3.SetLabel(str(int(self.c3.GetLabel()) - 1))
+
         if flags['draw'] <= 0:
             return False
 
@@ -488,8 +574,8 @@ class MyFrame(wx.Frame):
         dc.SetBackground(wx.Brush("WHITE"))
 
         # WONDERS
-        temp_left = self.wonder_leftside.GetSubBitmap((0, 0, 350, 318))
-        temp_right = self.wonder_rightside.GetSubBitmap((0, 0, 350, 472))
+        temp_left = self.wonder_leftside.GetSubBitmap((0, 0, 350, self.w1_heit))
+        temp_right = self.wonder_rightside.GetSubBitmap((0, 0, 350, self.w2_heit))
         dc.DrawBitmap(temp_left, 100, self.GetSize()[1] - 200 - temp_left.GetSize()[1], True)
         dc.DrawBitmap(temp_right, self.GetSize()[0] - 450, self.GetSize()[1] - 200 - temp_right.GetSize()[1], True)
 
@@ -525,9 +611,12 @@ class MyFrame(wx.Frame):
         self.bonus_icons = wx.Bitmap('Assets/bonus_icons.png', wx.BITMAP_TYPE_PNG)
         self.blank_tile = wx.Bitmap('Assets/blank_tile.png', wx.BITMAP_TYPE_PNG)
 
-        #subject to future change
-        self.wonder_leftside = wx.Bitmap('Assets/wonder_babylon.png', wx.BITMAP_TYPE_PNG)
-        self.wonder_rightside = wx.Bitmap('Assets/wonder_alexandria.png', wx.BITMAP_TYPE_PNG)
+        # WONDER ASSETS
+        self.wonder_leftside = wx.Bitmap('Assets/wonder_' + w1 + '.png', wx.BITMAP_TYPE_PNG)
+        self.wonder_rightside = wx.Bitmap('Assets/wonder_' + w2 + '.png', wx.BITMAP_TYPE_PNG)
+
+        self.w1_heit = self.wonder_leftside.GetSize()[1]//3
+        self.w2_heit = self.wonder_rightside.GetSize()[1]//3
 
         frame_size = self.GetSize()
         # [0] - WIDTH - 1538
@@ -563,6 +652,11 @@ class MyFrame(wx.Frame):
                                             pos=((frame_size[0] // 2) + 100, (frame_size[1] // 2) - 25))
 
         self.list_buttons = {'cent': self.button_cent, 'left': self.button_left, 'right': self.button_right}
+
+        # LABEL CARD COUNT
+        self.c1 = wx.StaticText(self.panel, label='60', pos=((frame_size[0] // 2), 50 + self.button_cent.GetSize()[1]))
+        self.c2 = wx.StaticText(self.panel, label='25', pos=((frame_size[0] // 2) - 150, (frame_size[1] // 2) - 25 + self.button_cent.GetSize()[1]))
+        self.c3 = wx.StaticText(self.panel, label='25', pos=((frame_size[0] // 2) + 150, (frame_size[1] // 2) - 25 + self.button_cent.GetSize()[1]))
 
         # BIND DECK-BUTTONS to FUNCTIONALITY
         self.button_cent.Bind(wx.EVT_BUTTON, lambda event: self.draw_card('cent'))
