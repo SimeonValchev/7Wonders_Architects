@@ -5,6 +5,7 @@ import time
 
 def generate_card(deck):
     if deck[0] == 0:
+        print('AHAHHAHHAHHAHAHAAHHHAHHAHAHA')
         return -1
 
     rand_int = random.randint(1, 14)
@@ -42,7 +43,7 @@ deck_zus = [25, 1, 2, 2, 2, 2, 3, 3, 1, 2, 2, 1, 1, 1, 2]
 dictionary_decks = {'alexandria':deck_alx, 'artemis':deck_art, 'babylon':deck_bab, 'gizeh':deck_giz, 'hallicarnas':deck_hal, 'rhodes':deck_rho, 'zeus':deck_zus }
 
 # INIT DECKS TO PLAY
-deck_cent = [0] + ([4] * 5) + [6, 8, 4, 4, 4, 2] + ([4] * 3)
+deck_cent = [60] + ([4] * 5) + [6, 8, 4, 4, 4, 2] + ([4] * 3)
 deck_left = dictionary_decks[w1]
 deck_right = dictionary_decks[w2]
 
@@ -623,14 +624,6 @@ class MyFrame(wx.Frame):
         if flags['draw'] <= 0:
             return False
 
-        # UPDATE LABEL
-        if which_deck == 'cent':
-            self.c1.SetLabel(str(int(self.c1.GetLabel()) - 1))
-        elif which_deck == 'left':
-            self.c2.SetLabel(str(int(self.c2.GetLabel()) - 1))
-        else:
-            self.c3.SetLabel(str(int(self.c3.GetLabel()) - 1))
-
         # EVENT HANDLER
         temp_card = top_cards[which_deck]
         if temp_card <= 6:
@@ -660,9 +653,16 @@ class MyFrame(wx.Frame):
         my_decks[which_deck][0] -= 1
         top_cards[which_deck] = generate_card(my_decks[which_deck])
 
+        # UPDATE LABEL
+        if which_deck == 'cent':
+            self.c1.SetLabel(str(int(self.c1.GetLabel()) - 1))
+        elif which_deck == 'left':
+            self.c2.SetLabel(str(int(self.c2.GetLabel()) - 1))
+        else:
+            self.c3.SetLabel(str(int(self.c1.GetLabel()) - 1))
+
         if top_cards[which_deck] == -1:
             # -1 if deck is empty, unbind button
-            print('unbinded')
             self.list_buttons[which_deck].SetBitmap(self.cards.GetSubBitmap((0, 0, 100, 148)))
             self.list_buttons[which_deck].Unbind(wx.EVT_BUTTON)
 
